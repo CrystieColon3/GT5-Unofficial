@@ -514,6 +514,7 @@ import static gregtech.api.enums.MetaTileEntityIDs.MATTER_REPLICATOR_UIV;
 import static gregtech.api.enums.MetaTileEntityIDs.MATTER_REPLICATOR_UMV;
 import static gregtech.api.enums.MetaTileEntityIDs.MATTER_REPLICATOR_UV;
 import static gregtech.api.enums.MetaTileEntityIDs.MATTER_REPLICATOR_ZPM;
+import static gregtech.api.enums.MetaTileEntityIDs.MEGA_CUTTER_CONTROLLER;
 import static gregtech.api.enums.MetaTileEntityIDs.MICROWAVE_ENERGY_TRANSMITTER_EV;
 import static gregtech.api.enums.MetaTileEntityIDs.MICROWAVE_ENERGY_TRANSMITTER_HV;
 import static gregtech.api.enums.MetaTileEntityIDs.MICROWAVE_ENERGY_TRANSMITTER_IV;
@@ -1053,6 +1054,7 @@ import gregtech.common.tileentities.machines.multi.MTELargeTurbineGasAdvanced;
 import gregtech.common.tileentities.machines.multi.MTELargeTurbineHPSteam;
 import gregtech.common.tileentities.machines.multi.MTELargeTurbinePlasma;
 import gregtech.common.tileentities.machines.multi.MTELargeTurbineSteam;
+import gregtech.common.tileentities.machines.multi.MTEMegaCutter;
 import gregtech.common.tileentities.machines.multi.MTEMultiAutoclave;
 import gregtech.common.tileentities.machines.multi.MTEMultiCanner;
 import gregtech.common.tileentities.machines.multi.MTEMultiFurnace;
@@ -1633,6 +1635,9 @@ public class LoaderMetaTileEntities implements Runnable { // TODO CHECK CIRCUIT 
         ItemList.LargeFluidExtractor.set(
             new MTELargeFluidExtractor(LARGE_FLUID_EXTRACTOR.ID, "multimachine.fluidextractor", "Large Fluid Extractor")
                 .getStackForm(1));
+
+        ItemList.Mega_Cutter.set(
+            new MTEMegaCutter(MEGA_CUTTER_CONTROLLER.ID, "multimachine.megacutter", "Mega Cutter").getStackForm(1L));
 
         if (Thaumcraft.isModLoaded()) {
             ItemList.ResearchCompleter.set(

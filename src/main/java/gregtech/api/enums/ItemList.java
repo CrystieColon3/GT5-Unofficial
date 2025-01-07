@@ -1620,6 +1620,7 @@ public enum ItemList implements IItemContainer {
     Depleted_Thorium_2,
     Depleted_Thorium_4,
 
+    Mega_Cutter,
     Processing_Array,
     Distillation_Tower,
     Energy_LapotronicOrb2,
