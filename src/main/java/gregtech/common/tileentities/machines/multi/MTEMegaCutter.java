@@ -5,18 +5,17 @@ import static gregtech.api.enums.HatchElement.*;
 import static gregtech.api.enums.Textures.BlockIcons.*;
 import static gregtech.api.util.GTStructureUtility.buildHatchAdder;
 
+import java.util.List;
+
 import javax.annotation.Nonnull;
 
-import mcp.mobius.waila.api.IWailaConfigHandler;
-import mcp.mobius.waila.api.IWailaDataAccessor;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.item.ItemStack;
+import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.EnumChatFormatting;
-import net.minecraft.util.StatCollector;
 import net.minecraft.world.World;
 import net.minecraftforge.common.util.ForgeDirection;
-import net.minecraft.nbt.NBTTagCompound;
 
 import org.jetbrains.annotations.NotNull;
 
@@ -44,20 +43,20 @@ import gregtech.api.recipe.check.CheckRecipeResultRegistry;
 import gregtech.api.recipe.check.SimpleCheckRecipeResult;
 import gregtech.api.render.TextureFactory;
 import gregtech.api.util.GTRecipe;
+import gregtech.api.util.GTUtility;
 import gregtech.api.util.MultiblockTooltipBuilder;
+import gregtech.api.util.OverclockCalculator;
 import gregtech.api.util.shutdown.SimpleShutDownReason;
-
-import java.util.List;
+import mcp.mobius.waila.api.IWailaConfigHandler;
+import mcp.mobius.waila.api.IWailaDataAccessor;
 
 public class MTEMegaCutter extends MTEExtendedPowerMultiBlockBase<MTEMegaCutter> implements ISurvivalConstructable {
-
 
     private static final int FIRST_PRECISION_THRESHOLD = 50;
     private static final int SECOND_PRECISION_THRESHOLD = 65;
     private static final int THIRD_PRECISION_THRESHOLD = 80;
     private int mTier;
     private int currentPrecisionValue;
-    private int precisionDisplay;
 
     // Steel casing
     private static final int CASING_INDEX = 16;
@@ -71,10 +70,12 @@ public class MTEMegaCutter extends MTEExtendedPowerMultiBlockBase<MTEMegaCutter>
             new String[][] { { "BBB", "B~B", "BBB" }, { "BBB", "B-B", "BBB" }, { "BBB", "BBB", "BBB" } })
         .addShape(
             STRUCTURE_TIER_2,
-            new String[][] { { "B B", "BBB", "B~B", "BBB" }, { "   ", "B-B", "B-B", "BBB" }, { "B B", "BBB", "BBB", "BBB" } })
+            new String[][] { { "B B", "BBB", "B~B", "BBB" }, { "   ", "B-B", "B-B", "BBB" },
+                { "B B", "BBB", "BBB", "BBB" } })
         .addShape(
             STRUCTURE_TIER_3,
-            new String[][] { { "B B", "BBB", "B~B", "BBB" }, { "B B", "---", "B-B", "BBB" }, { "B B", "BBB", "BBB", "BBB" } })
+            new String[][] { { "B B", "BBB", "B~B", "BBB" }, { "B B", "---", "B-B", "BBB" },
+                { "B B", "BBB", "BBB", "BBB" } })
         .addElement(
             'B',
             buildHatchAdder(MTEMegaCutter.class)
@@ -140,16 +141,6 @@ public class MTEMegaCutter extends MTEExtendedPowerMultiBlockBase<MTEMegaCutter>
     }
 
     @Override
-    protected MultiblockTooltipBuilder createTooltip() {
-        MultiblockTooltipBuilder tt = new MultiblockTooltipBuilder();
-        tt.addMachineType("Cutting Machine")
-            .addInfo("Cutting DN since 1984")
-            .beginStructureBlock(3, 3, 3, true)
-            .toolTipFinisher();
-        return tt;
-    }
-
-    @Override
     public boolean onRunningTick(ItemStack aStack) {
         if (currentPrecisionValue < FIRST_PRECISION_THRESHOLD) {
             stopMachine(SimpleShutDownReason.ofCritical("critical_precision_insufficient"));
@@ -169,6 +160,21 @@ public class MTEMegaCutter extends MTEExtendedPowerMultiBlockBase<MTEMegaCutter>
     }
 
     @Override
+    protected MultiblockTooltipBuilder createTooltip() {
+        MultiblockTooltipBuilder tt = new MultiblockTooltipBuilder();
+        tt.addMachineType("Cutting Machine")
+            .addInfo("Cutting DN since 1984")
+            .beginStructureBlock(3, 3, 3, true)
+            .toolTipFinisher();
+        return tt;
+    }
+
+    private int precisionDisplay;
+    private int maxParallelDisplay;
+    private double speedBonusDisplay;
+    private int perfectOverclocksDisplay;
+
+    @Override
     protected void drawTexts(DynamicPositionedColumn screenElements, SlotWidget inventorySlot) {
         super.drawTexts(screenElements, inventorySlot);
         screenElements
@@ -184,7 +190,47 @@ public class MTEMegaCutter extends MTEExtendedPowerMultiBlockBase<MTEMegaCutter>
                             + numberFormat.format(precisionDisplay)
                             + "%")
                     .setTextAlignment(Alignment.CenterLeft))
-            .widget(new FakeSyncWidget.IntegerSyncer(this::getCurrentPrecisionValue, val -> precisionDisplay = val));
+            .widget(new FakeSyncWidget.IntegerSyncer(this::getCurrentPrecisionValue, val -> precisionDisplay = val))
+            .widget(
+                new TextWidget()
+                    .setStringSupplier(
+                        () -> EnumChatFormatting.WHITE + "Max parallel: "
+                            + EnumChatFormatting.YELLOW
+                            + numberFormat.format(maxParallelDisplay))
+                    .setTextAlignment(Alignment.CenterLeft))
+            .widget(new FakeSyncWidget.IntegerSyncer(this::getMaxParallelRecipes, val -> maxParallelDisplay = val))
+            .widget(
+                new TextWidget()
+                    .setStringSupplier(
+                        () -> EnumChatFormatting.WHITE + "Speed modifier: "
+                            + EnumChatFormatting.YELLOW
+                            + numberFormat.format(speedBonusDisplay))
+                    .setTextAlignment(Alignment.CenterLeft))
+            .widget(new FakeSyncWidget.DoubleSyncer(this::getSpeedBonus, val -> speedBonusDisplay = val))
+            .widget(
+                new TextWidget()
+                    .setStringSupplier(
+                        () -> EnumChatFormatting.WHITE + "Perfect overclocks amount: "
+                            + EnumChatFormatting.YELLOW
+                            + numberFormat.format(perfectOverclocksDisplay))
+                    .setTextAlignment(Alignment.CenterLeft))
+            .widget(
+                new FakeSyncWidget.IntegerSyncer(this::getPerfectOverclocks, val -> perfectOverclocksDisplay = val));
+    }
+
+    @Override
+    public void getWailaNBTData(EntityPlayerMP player, TileEntity tile, NBTTagCompound tag, World world, int x, int y,
+        int z) {
+        super.getWailaNBTData(player, tile, tag, world, x, y, z);
+        tag.setInteger("multiTier", mTier);
+    }
+
+    @Override
+    public void getWailaBody(ItemStack itemStack, List<String> currentTip, IWailaDataAccessor accessor,
+        IWailaConfigHandler config) {
+        super.getWailaBody(itemStack, currentTip, accessor, config);
+        final NBTTagCompound tag = accessor.getNBTData();
+        currentTip.add("Tier: " + EnumChatFormatting.WHITE + tag.getInteger("multiTier") + EnumChatFormatting.RESET);
     }
 
     private int getCurrentPrecisionValue() {
@@ -236,6 +282,18 @@ public class MTEMegaCutter extends MTEExtendedPowerMultiBlockBase<MTEMegaCutter>
     protected ProcessingLogic createProcessingLogic() {
         return new ProcessingLogic() {
 
+            @Nonnull
+            @Override
+            protected OverclockCalculator createOverclockCalculator(@Nonnull GTRecipe recipe) {
+                // Check if the cutter is tier 3
+                if (mTier < 3) return super.createOverclockCalculator(recipe);
+
+                return super.createOverclockCalculator(recipe).setMachineHeat(getPerfectOverclocks() * 1800)
+                    .setRecipeHeat(0)
+                    .setHeatOC(true)
+                    .setHeatDiscount(false);
+            }
+
             @NotNull
             @Override
             protected CheckRecipeResult validateRecipe(@Nonnull GTRecipe recipe) {
@@ -244,7 +302,33 @@ public class MTEMegaCutter extends MTEExtendedPowerMultiBlockBase<MTEMegaCutter>
                 }
                 return CheckRecipeResultRegistry.SUCCESSFUL;
             }
-        };
+        }.setSpeedBonus(this.getSpeedBonus())
+            .setEuModifier(0.75F)
+            .setMaxParallelSupplier(this::getMaxParallelRecipes);
+    }
+
+    public int getMaxParallelRecipes() {
+        int baseParallel = 16;
+        if (this.currentPrecisionValue < FIRST_PRECISION_THRESHOLD) {
+            return baseParallel;
+        }
+        return (int) Math
+            .floor(baseParallel * Math.pow(2, (this.currentPrecisionValue - FIRST_PRECISION_THRESHOLD) / 12.5));
+    }
+
+    public double getSpeedBonus() {
+        if (mTier < 2) {
+            return (1F / 3F);
+        }
+        // default speedBonus of 200% gets affected by 5% speedBonus per 1% precision
+        return (1F / (3F + 0.15F * Math.max(0, (this.currentPrecisionValue - SECOND_PRECISION_THRESHOLD))));
+    }
+
+    public int getPerfectOverclocks() {
+        if (mTier < 3) {
+            return 0;
+        }
+        return (int) Math.floor(Math.max(0, this.currentPrecisionValue - THIRD_PRECISION_THRESHOLD) * 0.25F);
     }
 
     @Override
@@ -257,25 +341,6 @@ public class MTEMegaCutter extends MTEExtendedPowerMultiBlockBase<MTEMegaCutter>
     public void saveNBTData(NBTTagCompound aNBT) {
         aNBT.setInteger("multiTier", mTier);
         super.saveNBTData(aNBT);
-    }
-
-    @Override
-    public void getWailaNBTData(EntityPlayerMP player, TileEntity tile, NBTTagCompound tag, World world, int x, int y,
-                                int z) {
-        super.getWailaNBTData(player, tile, tag, world, x, y, z);
-        tag.setInteger("multiTier", mTier);
-    }
-
-    @Override
-    public void getWailaBody(ItemStack itemStack, List<String> currentTip, IWailaDataAccessor accessor,
-                             IWailaConfigHandler config) {
-        super.getWailaBody(itemStack, currentTip, accessor, config);
-        final NBTTagCompound tag = accessor.getNBTData();
-        currentTip.add(
-            "Tier: "
-                + EnumChatFormatting.WHITE
-                + tag.getInteger("multiTier")
-                + EnumChatFormatting.RESET);
     }
 
     @Override
@@ -316,5 +381,11 @@ public class MTEMegaCutter extends MTEExtendedPowerMultiBlockBase<MTEMegaCutter>
     @Override
     public boolean supportsSingleRecipeLocking() {
         return true;
+    }
+
+    @Override
+    protected void setProcessingLogicPower(ProcessingLogic logic) {
+        logic.setAvailableVoltage(GTUtility.roundUpVoltage(this.getMaxInputVoltage()));
+        logic.setAvailableAmperage(1L);
     }
 }
