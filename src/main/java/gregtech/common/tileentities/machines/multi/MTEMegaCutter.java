@@ -7,9 +7,16 @@ import static gregtech.api.util.GTStructureUtility.buildHatchAdder;
 
 import javax.annotation.Nonnull;
 
+import mcp.mobius.waila.api.IWailaConfigHandler;
+import mcp.mobius.waila.api.IWailaDataAccessor;
+import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.item.ItemStack;
+import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.EnumChatFormatting;
+import net.minecraft.util.StatCollector;
+import net.minecraft.world.World;
 import net.minecraftforge.common.util.ForgeDirection;
+import net.minecraft.nbt.NBTTagCompound;
 
 import org.jetbrains.annotations.NotNull;
 
@@ -40,22 +47,34 @@ import gregtech.api.util.GTRecipe;
 import gregtech.api.util.MultiblockTooltipBuilder;
 import gregtech.api.util.shutdown.SimpleShutDownReason;
 
+import java.util.List;
+
 public class MTEMegaCutter extends MTEExtendedPowerMultiBlockBase<MTEMegaCutter> implements ISurvivalConstructable {
+
 
     private static final int FIRST_PRECISION_THRESHOLD = 50;
     private static final int SECOND_PRECISION_THRESHOLD = 65;
     private static final int THIRD_PRECISION_THRESHOLD = 80;
+    private int mTier;
     private int currentPrecisionValue;
     private int precisionDisplay;
 
     // Steel casing
     private static final int CASING_INDEX = 16;
-    private static final String STRUCTURE_PIECE_MAIN = "main";
+    private static final String STRUCTURE_TIER_1 = "tier1";
+    private static final String STRUCTURE_TIER_2 = "tier2";
+    private static final String STRUCTURE_TIER_3 = "tier3";
     private static final IStructureDefinition<MTEMegaCutter> STRUCTURE_DEFINITION = StructureDefinition
         .<MTEMegaCutter>builder()
         .addShape(
-            STRUCTURE_PIECE_MAIN,
-            new String[][] { { "BBB", "B~B", "BBB" }, { "BBB", "B B", "BBB" }, { "BBB", "BBB", "BBB" } })
+            STRUCTURE_TIER_1,
+            new String[][] { { "BBB", "B~B", "BBB" }, { "BBB", "B-B", "BBB" }, { "BBB", "BBB", "BBB" } })
+        .addShape(
+            STRUCTURE_TIER_2,
+            new String[][] { { "B B", "BBB", "B~B", "BBB" }, { "   ", "B-B", "B-B", "BBB" }, { "B B", "BBB", "BBB", "BBB" } })
+        .addShape(
+            STRUCTURE_TIER_3,
+            new String[][] { { "B B", "BBB", "B~B", "BBB" }, { "B B", "---", "B-B", "BBB" }, { "B B", "BBB", "BBB", "BBB" } })
         .addElement(
             'B',
             buildHatchAdder(MTEMegaCutter.class)
@@ -174,19 +193,43 @@ public class MTEMegaCutter extends MTEExtendedPowerMultiBlockBase<MTEMegaCutter>
 
     @Override
     public void construct(ItemStack stackSize, boolean hintsOnly) {
-        buildPiece(STRUCTURE_PIECE_MAIN, stackSize, hintsOnly, 1, 1, 0);
+        if (stackSize.stackSize == 1) {
+            buildPiece(STRUCTURE_TIER_1, stackSize, hintsOnly, 1, 1, 0);
+        }
+        if (stackSize.stackSize == 2) {
+            buildPiece(STRUCTURE_TIER_2, stackSize, hintsOnly, 1, 2, 0);
+        }
+        if (stackSize.stackSize >= 3) {
+            buildPiece(STRUCTURE_TIER_3, stackSize, hintsOnly, 1, 2, 0);
+        }
     }
 
     @Override
     public int survivalConstruct(ItemStack stackSize, int elementBudget, ISurvivalBuildEnvironment env) {
+        int built = 0;
         if (mMachine) return -1;
-        return survivialBuildPiece(STRUCTURE_PIECE_MAIN, stackSize, 1, 1, 0, elementBudget, env, false, true);
+        if (stackSize.stackSize == 1) {
+            built = survivialBuildPiece(STRUCTURE_TIER_1, stackSize, 1, 1, 0, elementBudget, env, false, true);
+        }
+        if (stackSize.stackSize == 2) {
+            built = survivialBuildPiece(STRUCTURE_TIER_2, stackSize, 1, 2, 0, elementBudget, env, false, true);
+        }
+        if (stackSize.stackSize >= 3) {
+            built = survivialBuildPiece(STRUCTURE_TIER_3, stackSize, 1, 2, 0, elementBudget, env, false, true);
+        }
+        return built;
     }
 
     @Override
     public boolean checkMachine(IGregTechTileEntity aBaseMetaTileEntity, ItemStack aStack) {
-        mCasingAmount = 0;
-        return checkPiece(STRUCTURE_PIECE_MAIN, 1, 1, 0) && mCasingAmount > 0;
+        if (checkPiece(STRUCTURE_TIER_1, 1, 1, 0)) {
+            this.mTier = 1;
+        } else if (checkPiece(STRUCTURE_TIER_2, 1, 2, 0)) {
+            this.mTier = 2;
+        } else if (checkPiece(STRUCTURE_TIER_3, 1, 2, 0)) {
+            this.mTier = 3;
+        } else this.mTier = 0;
+        return (this.mTier > 0);
     }
 
     @Override
@@ -202,6 +245,37 @@ public class MTEMegaCutter extends MTEExtendedPowerMultiBlockBase<MTEMegaCutter>
                 return CheckRecipeResultRegistry.SUCCESSFUL;
             }
         };
+    }
+
+    @Override
+    public void loadNBTData(NBTTagCompound aNBT) {
+        mTier = aNBT.getInteger("multiTier");
+        super.loadNBTData(aNBT);
+    }
+
+    @Override
+    public void saveNBTData(NBTTagCompound aNBT) {
+        aNBT.setInteger("multiTier", mTier);
+        super.saveNBTData(aNBT);
+    }
+
+    @Override
+    public void getWailaNBTData(EntityPlayerMP player, TileEntity tile, NBTTagCompound tag, World world, int x, int y,
+                                int z) {
+        super.getWailaNBTData(player, tile, tag, world, x, y, z);
+        tag.setInteger("multiTier", mTier);
+    }
+
+    @Override
+    public void getWailaBody(ItemStack itemStack, List<String> currentTip, IWailaDataAccessor accessor,
+                             IWailaConfigHandler config) {
+        super.getWailaBody(itemStack, currentTip, accessor, config);
+        final NBTTagCompound tag = accessor.getNBTData();
+        currentTip.add(
+            "Tier: "
+                + EnumChatFormatting.WHITE
+                + tag.getInteger("multiTier")
+                + EnumChatFormatting.RESET);
     }
 
     @Override
